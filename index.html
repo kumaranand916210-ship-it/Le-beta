@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Aviator - Crash Game</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.8.1/socket.io.min.js"></script>
+  <style>
+    /* ==================== RESET & BASE ==================== */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+      background: #0D0D2B;
+      color: #FFF;
+      overflow-x: hidden;
+      min-height: 100vh;
+    }
+    button, input { font-family: inherit; }
+
+    /* ==================== AUTH SCREEN ==================== */
+    #authScreen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+      background: linear-gradient(180deg, #0D0D2B 0%, #1A0A2E 100%);
+    }
+    #authScreen .logo-text {
+      font-size: 56px; font-weight: bold; color: #FFD700; margin-bottom: 5px;
+      text-shadow: 0 0 30px rgba(255,215,0,0.3);
+    }
+    #authScreen .sub { color: #CCC; font-size: 16px; margin-bottom: 30px; }
+    #authScreen input {
+      width: 100%; max-width: 400px; padding: 15px; margin-bottom: 12px;
+      border-radius: 12px; border: 1px solid #333; background: #1A1A3E;
+      color: #FFF; font-size: 16px; outline: none;
+    }
+    #authScreen input:focus { border-color: #FFD700; }
+    #authScreen input::placeholder { color: #888; }
+    .authBtn {
+      width: 100%; max-width: 400px; padding: 18px; border: none;
+      border-radius: 12px; background: linear-gradient(135deg, #FFD700, #FFA000);
+      color: #000; font-size: 18px; font-weight: bold; cursor: pointer;
+      margin-top: 5px; transition: transform 0.1s;
+    }
+    .authBtn:active { transform: scale(0.97); }
+    .switchLink { color: #4FC3F7; margin-top: 20px; cursor: pointer; font-size: 14px; }
+    .switchLink:hover { text-decoration: underline; }
+    .bonusBox {
+      width: 100%; max-width: 400px; background: #1A3A1A;
+      border: 1px solid #2E7D32; border-radius: 12px; padding: 15px; margin-bottom: 12px;
+    }
+    .bonusBox p { color: #81C784; font-size: 13px; margin-bottom: 3px; }
+    .bonusBox .note { color: #FFB74D; font-size: 11px; font-style: italic; margin-top: 5px; }
+
+    /* ==================== GAME SCREEN ==================== */
+    #gameScreen { display: none; }
+
+    /* Header */
+    .header {
+      padding: 12px 15px;
+      background: linear-gradient(180deg, #0D0D2B 0%, #1A1A3E 100%);
+      border-bottom: 1px solid #2A2A5E;
+      position: sticky; top: 0; z-index: 50;
+    }
+    .headerTop { display: flex; justify-content: space-between; align-items: center; }
+    .balSection { }
+    .balLabel { color: #888; font-size: 11px; }
+    .balAmt { font-size: 22px; font-weight: bold; color: #FFF; }
+    .bonusBadge {
+      background: #2E7D32; padding: 5px 14px; border-radius: 20px;
+      font-size: 13px; font-weight: bold; color: #FFF;
+    }
+    .headerBtns { display: flex; gap: 8px; }
+    .hBtn {
+      padding: 8px 18px; border: none; border-radius: 8px;
+      font-size: 13px; font-weight: bold; cursor: pointer; color: #FFF;
+      transition: opacity 0.2s;
+    }
+    .hBtn:active { opacity: 0.7; }
+    .hBtn.dep { background: #4CAF50; }
+    .hBtn.wd { background: #FF6B35; }
+    .refStrip {
+      background: #1A237E; border: 1px solid #3F51B5;
+      border-radius: 8px; padding: 8px; margin-top: 8px;
+      text-align: center; cursor: pointer; color: #FFD700;
+      font-size: 14px; font-weight: bold;
+    }
+
+    /* History */
+    .historyRow {
+      padding: 8px 15px; display: flex; gap: 6px;
+      overflow-x: auto; white-space: nowrap;
+    }
+    .historyRow::-webkit-scrollbar { display: none; }
+    .historyPill {
+      display: inline-block; padding: 5px 14px; border-radius: 15px;
+      font-size: 11px; font-weight: bold; color: #FFF; flex-shrink: 0;
+    }
+
+    /* Game Area */
+    .gameArea {
+      margin: 8px 12px; border-radius: 16px; overflow: hidden; position: relative;
+      height: calc(100vh - 420px); min-height: 250px;
+      background: linear-gradient(180deg, #0a0a3e 0%, #1a1a6e 40%, #2a1a3e 100%);
+      border: 1px solid #2A2A5E;
+    }
+    .canvasWrapper { position: relative; width: 100%; height: 100%; overflow: hidden; }
+    #gameCanvas { width: 100%; height: 100%; display: block; }
+    .multOverlay {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%); text-align: center;
+      z-index: 5; pointer-events: none;
+    }
+    #multDisplay {
+      font-size: 54px; font-weight: bold; text-shadow: 0 0 20px rgba(0,0,0,0.5);
+      transition: color 0.3s;
+    }
+    #profitDisplay { font-size: 22px; font-weight: bold; margin-top: 5px; display: none; color: #00C853; }
+    #cashoutDisplay { font-size: 16px; font-weight: bold; margin-top: 5px; display: none; color: #4FC3F7; }
+    .statusOverlay { position: absolute; top: 10px; left: 15px; z-index: 5; pointer-events: none; }
+    .statusOverlay p { font-size: 12px; color: #AAA; }
+    .statusOverlay .roundNum { font-size: 11px; color: #888; }
+
+    /* Bet Section */
+    .betSection {
+      padding: 10px 15px; position: sticky; bottom: 0;
+      background: #0D0D2B; border-top: 1px solid #2A2A5E;
+    }
+    .quickBets { display: flex; gap: 6px; justify-content: center; margin-bottom: 10px; flex-wrap: wrap; }
+    .qBtn {
+      padding: 10px 18px; border: 1px solid #4A4A8E; border-radius: 10px;
+      background: #2A2A5E; color: #FFF; font-size: 14px; font-weight: bold;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .qBtn:active { background: #4A4A8E; transform: scale(0.95); }
+    .qBtn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .cashoutBtn {
+      width: 100%; padding: 18px; border: none; border-radius: 12px;
+      font-size: 18px; font-weight: bold; cursor: pointer; transition: all 0.15s;
+    }
+    .cashoutBtn.active { background: #00C853; color: #FFF; }
+    .cashoutBtn.active:active { transform: scale(0.97); }
+    .cashoutBtn.disabled { background: #333; color: #666; cursor: not-allowed; }
+    .cashoutBtn.locked { background: #D50000; color: #FFF; }
+
+    /* Player List */
+    .playerSection { padding: 0 15px; }
+    .playerToggle {
+      padding: 10px; background: #1A1A
